@@ -6,16 +6,13 @@ use crate::{
 };
 use actix_web::{
     cookie::{time::Duration as ActixWebDuration, Cookie},
-    get, post, web, HttpMessage, HttpRequest, HttpResponse, Responder,
+    get, post, web, HttpRequest, HttpResponse, Responder,
 };
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use chrono::{prelude::*, Duration};
-use jsonwebtoken::{encode, EncodingKey, Header};
-use redis::{AsyncCommands, RedisResult};
-use serde_json::json;
+use redis::AsyncCommands;
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -426,6 +423,7 @@ async fn logout_handler(
         .http_only(true)
         .finish();
 
+    // send response
     HttpResponse::Ok()
         .cookie(access_cookie)
         .cookie(refresh_cookie)
@@ -433,12 +431,23 @@ async fn logout_handler(
         .json(serde_json::json!({"status": "success"}))
 }
 
+#[get("/users/me")]
+async fn get_me_handler(jwt_guard: jwt_auth::JwtMiddleware) -> impl Responder {
+    let json_response = serde_json::json!({
+        "status":  "success",
+        "data": serde_json::json!({
+            "user": filter_user_record(&jwt_guard.user)
+        })
+    });
+
+    HttpResponse::Ok().json(json_response)
+}
+
 pub fn config(conf: &mut web::ServiceConfig) {
     let scope = web::scope("/api")
-        // .service(health_checker_handler)
         .service(refresh_access_token_handler)
-        // .service(logout_handler)
-        // .service(get_me_handler)
+        .service(logout_handler)
+        .service(get_me_handler)
         .service(register_user_handler)
         .service(login_user_handler);
 
